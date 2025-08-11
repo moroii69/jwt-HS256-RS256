@@ -21,11 +21,16 @@ class AlgorithmError extends JWTError {}
 function base64urlEncode(input) {
   // input: Buffer or string
   const buf = Buffer.isBuffer(input) ? input : Buffer.from(String(input));
-  return buf.toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  return buf
+    .toString("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
 }
 
 function base64urlDecodeToBuffer(b64u) {
-  if (typeof b64u !== "string") throw new TypeError("base64url input must be a string");
+  if (typeof b64u !== "string")
+    throw new TypeError("base64url input must be a string");
   // Convert from base64url to base64
   let b64 = b64u.replace(/-/g, "+").replace(/_/g, "/");
   // Pad
@@ -56,7 +61,10 @@ function constantTimeEqual(a, b) {
     // Use compare on equal-length buffers only; to avoid leaking length via timing,
     // compare with a buffer of the same length created deterministically.
     const fake = Buffer.alloc(a.length);
-    return !crypto.timingSafeEqual(Buffer.concat([a, fake]).slice(0, a.length), b);
+    return !crypto.timingSafeEqual(
+      Buffer.concat([a, fake]).slice(0, a.length),
+      b
+    );
   }
   return crypto.timingSafeEqual(a, b);
 }
@@ -69,24 +77,53 @@ function nowSec() {
 // --- Signing / verifying primitives ---
 function hmacSign(data, secret, algorithm = "HS256") {
   const algo = algorithm.toLowerCase();
-  if (!algo.startsWith("hs")) throw new AlgorithmError("Unsupported HMAC algorithm: " + algorithm);
-  const nodeAlgo = algo === "hs256" ? "sha256" : algo === "hs384" ? "sha384" : algo === "hs512" ? "sha512" : null;
-  if (!nodeAlgo) throw new AlgorithmError("Unsupported HMAC algorithm: " + algorithm);
+  if (!algo.startsWith("hs"))
+    throw new AlgorithmError("Unsupported HMAC algorithm: " + algorithm);
+  const nodeAlgo =
+    algo === "hs256"
+      ? "sha256"
+      : algo === "hs384"
+      ? "sha384"
+      : algo === "hs512"
+      ? "sha512"
+      : null;
+  if (!nodeAlgo)
+    throw new AlgorithmError("Unsupported HMAC algorithm: " + algorithm);
   return crypto.createHmac(nodeAlgo, secret).update(data).digest();
 }
 
 function rsaSign(data, privateKeyPem, algorithm = "RS256") {
   const algo = algorithm.toLowerCase();
-  const nodeAlgo = algo === "rs256" ? "RSA-SHA256" : algo === "rs384" ? "RSA-SHA384" : algo === "rs512" ? "RSA-SHA512" : null;
-  if (!nodeAlgo) throw new AlgorithmError("Unsupported RSA algorithm: " + algorithm);
+  const nodeAlgo =
+    algo === "rs256"
+      ? "RSA-SHA256"
+      : algo === "rs384"
+      ? "RSA-SHA384"
+      : algo === "rs512"
+      ? "RSA-SHA512"
+      : null;
+  if (!nodeAlgo)
+    throw new AlgorithmError("Unsupported RSA algorithm: " + algorithm);
   return crypto.createSign(nodeAlgo).update(data).end().sign(privateKeyPem);
 }
 
 function rsaVerify(data, signatureBuf, publicKeyPem, algorithm = "RS256") {
   const algo = algorithm.toLowerCase();
-  const nodeAlgo = algo === "rs256" ? "RSA-SHA256" : algo === "rs384" ? "RSA-SHA384" : algo === "rs512" ? "RSA-SHA512" : null;
-  if (!nodeAlgo) throw new AlgorithmError("Unsupported RSA algorithm: " + algorithm);
-  return crypto.createVerify(nodeAlgo).update(data).end().verify(publicKeyPem, signatureBuf);
+  const nodeAlgo =
+    algo === "rs256"
+      ? "RSA-SHA256"
+      : algo === "rs384"
+      ? "RSA-SHA384"
+      : algo === "rs512"
+      ? "RSA-SHA512"
+      : null;
+  if (!nodeAlgo)
+    throw new AlgorithmError("Unsupported RSA algorithm: " + algorithm);
+  return crypto
+    .createVerify(nodeAlgo)
+    .update(data)
+    .end()
+    .verify(publicKeyPem, signatureBuf);
 }
 
 // --- Public API ---
@@ -115,11 +152,17 @@ function sign(payload = {}, key, options = {}) {
   // copy payload and apply standard claims if provided
   const pl = Object.assign({}, payload);
   if (opts.expiresIn !== undefined) {
-    const exp = typeof opts.expiresIn === "number" ? now + Math.floor(opts.expiresIn) : Math.floor(new Date(opts.expiresIn).getTime() / 1000);
+    const exp =
+      typeof opts.expiresIn === "number"
+        ? now + Math.floor(opts.expiresIn)
+        : Math.floor(new Date(opts.expiresIn).getTime() / 1000);
     pl.exp = exp;
   }
   if (opts.notBefore !== undefined) {
-    const nbf = typeof opts.notBefore === "number" ? now + Math.floor(opts.notBefore) : Math.floor(new Date(opts.notBefore).getTime() / 1000);
+    const nbf =
+      typeof opts.notBefore === "number"
+        ? now + Math.floor(opts.notBefore)
+        : Math.floor(new Date(opts.notBefore).getTime() / 1000);
     pl.nbf = nbf;
   }
   if (opts.issuer) pl.iss = opts.issuer;
@@ -137,7 +180,10 @@ function sign(payload = {}, key, options = {}) {
     if (!key) throw new TypeError("Secret key required for HMAC signing");
     signatureBuf = hmacSign(signingInput, key, alg);
   } else if (alg.startsWith("RS")) {
-    if (!key || !key.privateKey) throw new TypeError("Private key PEM required for RSA signing; pass { privateKey: '-----BEGIN...' }");
+    if (!key || !key.privateKey)
+      throw new TypeError(
+        "Private key PEM required for RSA signing; pass { privateKey: '-----BEGIN...' }"
+      );
     signatureBuf = rsaSign(signingInput, key.privateKey, alg);
   } else {
     throw new AlgorithmError("Unsupported algorithm: " + alg);
@@ -163,21 +209,42 @@ function sign(payload = {}, key, options = {}) {
 function verify(token, keyOrKeys, options = {}) {
   if (typeof token !== "string") throw new TypeError("token must be a string");
   const opts = Object.assign({}, DEFAULTS, options);
+
+  token = token.trim();
+
   const parts = token.split(".");
-  if (parts.length !== 3) throw new InvalidTokenError("Token must consist of header.payload.signature");
+  if (parts.length !== 3)
+    throw new InvalidTokenError(
+      "Token must consist of header.payload.signature"
+    );
+
   const [h64, p64, s64] = parts;
 
-  // decode header & payload
-  const headerBuf = base64urlDecodeToBuffer(h64);
-  const payloadBuf = base64urlDecodeToBuffer(p64);
-  const signatureBuf = base64urlDecodeToBuffer(s64);
+  if (!h64 || !p64 || !s64)
+    throw new InvalidTokenError("Token has empty segment(s)");
 
-  const header = safeJsonParse(headerBuf.toString("utf8"));
-  const payload = safeJsonParse(payloadBuf.toString("utf8"));
+  let headerBuf, payloadBuf, signatureBuf;
+  try {
+    headerBuf = base64urlDecodeToBuffer(h64);
+    payloadBuf = base64urlDecodeToBuffer(p64);
+    signatureBuf = base64urlDecodeToBuffer(s64);
+  } catch (e) {
+    // base64 decoding error -> invalid token
+    throw new InvalidTokenError("Invalid base64url encoding in token");
+  }
 
-  // header validation
-  if (!isObject(header) || typeof header.alg !== "string") throw new InvalidTokenError("Invalid header");
-  if (header.alg === "none") throw new AlgorithmError("alg 'none' is not allowed");
+  let header, payload;
+  try {
+    header = safeJsonParse(headerBuf.toString("utf8"));
+    payload = safeJsonParse(payloadBuf.toString("utf8"));
+  } catch (e) {
+    throw e;
+  }
+
+  if (!isObject(header) || typeof header.alg !== "string")
+    throw new InvalidTokenError("Invalid header");
+  if (header.alg === "none")
+    throw new AlgorithmError("alg 'none' is not allowed");
 
   const alg = header.alg;
   if (opts.algorithms && !opts.algorithms.includes(alg)) {
@@ -186,75 +253,122 @@ function verify(token, keyOrKeys, options = {}) {
 
   const signingInput = `${h64}.${p64}`;
 
-  // obtain key for verification
-  // For RS* we accept keyOrKeys.publicKey or a resolver function (kid -> key)
-  let keyForVerification;
+  // -- sgnature verification --
   if (alg.startsWith("HS")) {
-    // Expect a plain secret string
-    if (typeof keyOrKeys !== "string") throw new TypeError("HS algorithms require a secret string as key");
-    const expectedSigBuf = hmacSign(signingInput, keyOrKeys, alg);
-    // constant-time compare
-    if (!constantTimeEqual(expectedSigBuf, signatureBuf)) throw new SignatureVerificationError("Invalid signature");
-  } else if (alg.startsWith("RS")) {
-    // Accept either { publicKey } or function(kid) -> publicKey string
-    if (typeof keyOrKeys === "function") {
-      // allow user to resolve by kid (header.kid)
-      const keyResolved = keyOrKeys(header.kid);
-      if (!keyResolved || !keyResolved.publicKey) throw new TypeError("Resolver must return { publicKey }");
-      keyForVerification = keyResolved.publicKey;
-    } else if (isObject(keyOrKeys) && keyOrKeys.publicKey) {
-      keyForVerification = keyOrKeys.publicKey;
-    } else {
-      throw new TypeError("RS algorithms require { publicKey } or resolver function");
+    if (typeof keyOrKeys !== "string")
+      throw new TypeError("HS algorithms require a secret string as key");
+    let expectedBuf;
+    try {
+      expectedBuf = hmacSign(signingInput, keyOrKeys, alg); // returns Buffer
+    } catch (e) {
+      throw new AlgorithmError("HMAC computation failed");
     }
-    const ok = rsaVerify(signingInput, signatureBuf, keyForVerification, alg);
-    if (!ok) throw new SignatureVerificationError("Invalid signature (RSA verify failed)");
+    try {
+      if (expectedBuf.length !== signatureBuf.length) {
+        const fake = Buffer.alloc(signatureBuf.length, 0);
+        const left =
+          expectedBuf.length >= signatureBuf.length
+            ? expectedBuf.slice(0, signatureBuf.length)
+            : Buffer.concat([
+                expectedBuf,
+                fake.slice(0, signatureBuf.length - expectedBuf.length),
+              ]);
+        const right = signatureBuf;
+        if (!crypto.timingSafeEqual(left, right)) {
+          throw new SignatureVerificationError("Invalid signature");
+        } else {
+          throw new SignatureVerificationError("Invalid signature");
+        }
+      } else {
+        if (!crypto.timingSafeEqual(expectedBuf, signatureBuf)) {
+          throw new SignatureVerificationError("Invalid signature");
+        }
+      }
+    } catch (e) {
+      if (e instanceof SignatureVerificationError) throw e;
+      // propagate other unexpected errors as signature verification failures
+      throw new SignatureVerificationError("Invalid signature");
+    }
+  } else if (alg.startsWith("RS")) {
+    // resolve public key
+    let publicKeyPem;
+    if (typeof keyOrKeys === "function") {
+      const resolved = keyOrKeys(header.kid);
+      if (!resolved || !resolved.publicKey)
+        throw new TypeError("Resolver must return { publicKey }");
+      publicKeyPem = resolved.publicKey;
+    } else if (isObject(keyOrKeys) && keyOrKeys.publicKey) {
+      publicKeyPem = keyOrKeys.publicKey;
+    } else {
+      throw new TypeError(
+        "RS algorithms require { publicKey } or resolver function"
+      );
+    }
+
+    let ok;
+    try {
+      ok = rsaVerify(signingInput, signatureBuf, publicKeyPem, alg);
+    } catch (e) {
+      throw new SignatureVerificationError("Invalid signature");
+    }
+    if (!ok) throw new SignatureVerificationError("Invalid signature");
   } else {
     throw new AlgorithmError("Unsupported algorithm: " + alg);
   }
 
-  // Claim checks
+  // -- claim checks --
   const now = nowSec();
   const tolerance = opts.clockToleranceSec || DEFAULTS.clockToleranceSec;
 
   if (opts.requiredClaims && Array.isArray(opts.requiredClaims)) {
     for (const rc of opts.requiredClaims) {
-      if (!(rc in payload)) throw new InvalidTokenError(`Missing required claim: ${rc}`);
+      if (!(rc in payload))
+        throw new InvalidTokenError(`Missing required claim: ${rc}`);
     }
   }
 
   if (payload.exp !== undefined) {
-    if (typeof payload.exp !== "number") throw new InvalidTokenError("exp claim must be number");
-    if (now > payload.exp + tolerance) throw new TokenExpiredError("Token expired");
+    if (typeof payload.exp !== "number")
+      throw new InvalidTokenError("exp claim must be number");
+    if (now > payload.exp + tolerance)
+      throw new TokenExpiredError("Token expired");
   }
   if (payload.nbf !== undefined) {
-    if (typeof payload.nbf !== "number") throw new InvalidTokenError("nbf claim must be number");
-    if (now + tolerance < payload.nbf) throw new TokenNotActiveError("Token not yet active (nbf)");
+    if (typeof payload.nbf !== "number")
+      throw new InvalidTokenError("nbf claim must be number");
+    if (now + tolerance < payload.nbf)
+      throw new TokenNotActiveError("Token not yet active (nbf)");
   }
   if (payload.iat !== undefined) {
-    if (typeof payload.iat !== "number") throw new InvalidTokenError("iat claim must be number");
-    // optional maxAge check will be performed below
+    if (typeof payload.iat !== "number")
+      throw new InvalidTokenError("iat claim must be number");
   }
 
-  if (opts.issuer && payload.iss !== opts.issuer) throw new InvalidTokenError("Issuer (iss) mismatch");
-  if (opts.subject && payload.sub !== opts.subject) throw new InvalidTokenError("Subject (sub) mismatch");
+  if (opts.issuer && payload.iss !== opts.issuer)
+    throw new InvalidTokenError("Issuer (iss) mismatch");
+  if (opts.subject && payload.sub !== opts.subject)
+    throw new InvalidTokenError("Subject (sub) mismatch");
   if (opts.audience) {
-    // allow opts.audience to be string or array
     const aud = payload.aud;
-    if (aud === undefined) throw new InvalidTokenError("Token missing audience (aud)");
+    if (aud === undefined)
+      throw new InvalidTokenError("Token missing audience (aud)");
     const audiences = Array.isArray(aud) ? aud : [aud];
-    const required = Array.isArray(opts.audience) ? opts.audience : [opts.audience];
-    const match = required.some(r => audiences.includes(r));
+    const required = Array.isArray(opts.audience)
+      ? opts.audience
+      : [opts.audience];
+    const match = required.some((r) => audiences.includes(r));
     if (!match) throw new InvalidTokenError("Audience (aud) mismatch");
   }
 
   if (opts.maxAgeSec !== undefined) {
-    if (payload.iat === undefined) throw new InvalidTokenError("iat required for maxAge check");
+    if (payload.iat === undefined)
+      throw new InvalidTokenError("iat required for maxAge check");
     const age = now - payload.iat;
-    if (age - tolerance > Number(opts.maxAgeSec)) throw new TokenExpiredError("Token exceeds maxAge");
+    if (age - tolerance > Number(opts.maxAgeSec))
+      throw new TokenExpiredError("Token exceeds maxAge");
   }
 
-  // all checks passed
+  // if checks passed — return payload
   return payload;
 }
 
